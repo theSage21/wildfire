@@ -6,7 +6,6 @@ class RWA(nn.Module):
     """
     Recurrent Weighted Average
     https://arxiv.org/pdf/1703.01253.pdf
-    ------------
     """
     def __init__(self, input_dim, output_dim, activation=None):
         super().__init__()
@@ -44,3 +43,39 @@ class RWA(nn.Module):
             last_a_max = a_max
             outputs.append(last_h)
         return torch.stack(outputs, dim=1)
+
+
+class CorefGRU(nn.Module):
+    """
+    Coreference GRU
+    https://arxiv.org/pdf/1804.05922.pdf
+    """
+    def __init__(self, inp_dim, out_dim):
+        super().__init__()
+        self.w_z = nn.Linear(inp_dim, out_dim)
+        self.u_z = nn.Linear(out_dim, out_dim, bias=False)
+        self.w_r = nn.Linear(inp_dim, out_dim)
+        self.u_r = nn.Linear(inp_dim, out_dim, bias=False)
+        self.w_h = nn.Linear(inp_dim, out_dim)
+        self.u_h = nn.Linear(out_dim, out_dim, bias=False)
+        self.out_dim = out_dim
+        self.inp_dim = inp_dim
+
+    def forward(self, inp, last_coref_idx):
+        h_last = torch.zeros((inp.size()[0], self.out_dim))
+        hidden_states = []
+        for i in range(inp.size()[1]):
+            xi, idx = inp[i], last_coref_idx[i]
+            # -------
+            z = self.w_z(xi) + self.u_z(h_last)
+            z = nn.Sigmoid()(z)
+            # -------
+            r = self.w_r(xi) + self.u_r(h_last)
+            r = nn.Sigmoid()(r)
+            # --------
+            z_partial = self.w_z(x) + self.u_z(r * h_last)
+            h = (1 - z) * h_last + z * nn.Tanh()(z_partial)
+            # --------
+            h_last = h
+            hidden_states.append(h_last)
+        return inp
