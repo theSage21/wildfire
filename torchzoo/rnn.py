@@ -65,6 +65,13 @@ class CorefGRU(nn.Module):
         self.k2 = nn.Linear(inp_dim, 1, bias=False)
 
     def forward(self, inp, last_coref_idx):
+        """
+        Expects inputs and a corresponding tensor of
+        last coref index.
+
+            inp shape B, L, D
+            cor shape B, L
+        """
         B = inp.size()[0]
         h_last = torch.zeros((B, self.out_dim))
         state_history = []
@@ -86,19 +93,6 @@ class CorefGRU(nn.Module):
             z = nn.Sigmoid()(self.w_z(xi) + self.u_z(mt))
             # ---------- generate h~
             h_ = nn.Tanh()(self.w_h(xi) + r * self.u_h(mt))
-            # NOTE: https://github.com/theSage21/torchzoo/issues/1
             h = (1 - z) * mt + z * h_
             state_history.append(h)
         return torch.stack(state_history, dim=1)
-
-
-# TODO: Cleanup
-import numpy as np
-x = torch.randn((4, 3, 2))
-i = torch.from_numpy(np.array([[0, 0, 1],
-                               [0, 0, 1],
-                               [0, 1, 2],
-                               [0, 0, 0]])).long()
-net = CorefGRU(2, 5)
-print(x.size())
-print(net.forward(x, i).size())
