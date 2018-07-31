@@ -52,30 +52,53 @@ class CorefGRU(nn.Module):
     """
     def __init__(self, inp_dim, out_dim):
         super().__init__()
-        self.w_z = nn.Linear(inp_dim, out_dim)
-        self.u_z = nn.Linear(out_dim, out_dim, bias=False)
-        self.w_r = nn.Linear(inp_dim, out_dim)
-        self.u_r = nn.Linear(inp_dim, out_dim, bias=False)
-        self.w_h = nn.Linear(inp_dim, out_dim)
-        self.u_h = nn.Linear(out_dim, out_dim, bias=False)
         self.out_dim = out_dim
         self.inp_dim = inp_dim
+        self.split_dim = out_dim // 2
+        self.w_r = nn.Linear(inp_dim, out_dim)
+        self.u_r = nn.Linear(out_dim, out_dim, bias=False)
+        self.w_z = nn.Linear(inp_dim, out_dim)
+        self.u_z = nn.Linear(out_dim, out_dim, bias=False)
+        self.w_h = nn.Linear(inp_dim, out_dim)
+        self.u_h = nn.Linear(out_dim, out_dim, bias=False)
+        self.k1 = nn.Linear(inp_dim, 1, bias=False)
+        self.k2 = nn.Linear(inp_dim, 1, bias=False)
 
     def forward(self, inp, last_coref_idx):
-        h_last = torch.zeros((inp.size()[0], self.out_dim))
-        hidden_states = []
+        B = inp.size()[0]
+        h_last = torch.zeros((B, self.out_dim))
+        state_history = []
         for i in range(inp.size()[1]):
-            xi, idx = inp[i], last_coref_idx[i]
-            # -------
-            z = self.w_z(xi) + self.u_z(h_last)
-            z = nn.Sigmoid()(z)
-            # -------
-            r = self.w_r(xi) + self.u_r(h_last)
-            r = nn.Sigmoid()(r)
-            # --------
-            z_partial = self.w_z(x) + self.u_z(r * h_last)
-            h = (1 - z) * h_last + z * nn.Tanh()(z_partial)
-            # --------
-            h_last = h
-            hidden_states.append(h_last)
-        return inp
+            xi, ci = inp[:, i], last_coref_idx[:, i]
+            # ---------- generate mt
+            coref = [state_history[idx-1][bi] if idx > 0 else torch.zeros((B, self.out_dim))[bi]
+                     for bi, idx in enumerate(ci)]
+            coref = torch.stack(coref, dim=0)
+            #       ------- calculate a
+            e1e2 = torch.cat([self.k1(xi), self.k2(xi)], dim=1)
+            a = nn.Softmax(dim=1)(e1e2)
+            a = torch.unsqueeze(a[:, 0], dim=1)
+            p1, p2 = h_last[:, :self.split_dim], coref[:, self.split_dim:]
+            mt = torch.cat([a * p1, (1 - a) * p2], dim=1)
+            # ---------- generate r
+            r = nn.Sigmoid()(self.w_r(xi) + self.u_r(mt))
+            # ---------- generate z
+            z = nn.Sigmoid()(self.w_z(xi) + self.u_z(mt))
+            # ---------- generate h~
+            h_ = nn.Tanh()(self.w_h(xi) + r * self.u_h(mt))
+            # NOTE: https://github.com/theSage21/torchzoo/issues/1
+            h = (1 - z) * mt + z * h_
+            state_history.append(h)
+        return torch.stack(state_history, dim=1)
+
+
+# TODO: Cleanup
+import numpy as np
+x = torch.randn((4, 3, 2))
+i = torch.from_numpy(np.array([[0, 0, 1],
+                               [0, 0, 1],
+                               [0, 1, 2],
+                               [0, 0, 0]])).long()
+net = CorefGRU(2, 5)
+print(x.size())
+print(net.forward(x, i).size())
