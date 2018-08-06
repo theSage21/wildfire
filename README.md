@@ -9,7 +9,7 @@ Implementations of various NNs in pytorch
 from torchzoo import FeedForward, COOL
 
 # recurrent models
-from torchzoo import RWA
+from torchzoo import RWA, CorefGRU
 ```
 
 Benchmarks / Reproduction studies are held in [TorchCircus](https://github.com/theSage21/torchcircus).
