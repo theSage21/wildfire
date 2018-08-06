@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 
@@ -16,6 +17,16 @@ class RWA(nn.Module):
         self._g = nn.Linear(input_dim+output_dim, output_dim)
         self._a = nn.Linear(input_dim+output_dim, output_dim, bias=False)
         self.s0 = nn.parameter.Parameter(torch.Tensor(output_dim,))
+        # ----------- initialize weights
+        self.s0 = nn.init.normal_(self.s0, 0, 1)
+        self._u.bias.data.fill_(0)
+        self._g.bias.data.fill_(0)
+
+        low = - math.sqrt(6 / (input_dim + output_dim))
+        high = - low
+        self._u.weight.data = nn.init.uniform_(self._u.weight.data, low, high)
+        self._g.weight.data = nn.init.uniform_(self._g.weight.data, low, high)
+        self._a.weight.data = nn.init.uniform_(self._a.weight.data, low, high)
 
     def forward(self, x):
         s0 = torch.stack([self.s0]*x.size()[0], dim=0)
